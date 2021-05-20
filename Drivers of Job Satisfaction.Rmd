@@ -1,0 +1,256 @@
+---
+title: "Drivers of Job Satisfaction"
+output: pdf_document
+fontsize: 11pt
+geometry: margin=0.5in
+---
+```{r, eval = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+packageload <- c("tidyverse", "dplyr", "here", "Hmisc", "purrr", "stats","boot")
+library(readxl) # read excel files
+sapply(packageload, library, character.only = T, quietly = T)
+```
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+packageload <- c("tidyverse", "dplyr", "here", "Hmisc", "purrr", "stats","boot")
+library(readxl) # read excel files
+sapply(packageload, library, character.only = T, quietly = T)
+```
+input raw data  
+```{r load_data}
+rawdata<- readxl::read_excel(paste(here::here(), "Data.xlsx", sep = "/"),
+                             sheet = "Data", col_names = c("ID","Auto", "SE1", "SE2","SE3", "SS1", "SS2","SS3", "TS1", "TS2","TS3", "JS1", "JS2","JS3", "JS4", "FP1","FP2","OA1","OA2", "JE1","JE2", "CR1","CR2","CR3"), skip = 1, na = c("99")) # recode missing data '99' as NA
+# load demo data
+rawdemo <- readxl::read_excel(paste(here::here(), "Data.xlsx", sep = "/"),
+                             sheet = "Demographics",
+                             col_names = TRUE,
+                             na = c("99"))
+#create mean scores for the items in data sheet and demographics  
+cleandata <- rawdata %>% mutate(
+    SE = rowMeans(dplyr::select(., starts_with("SE")), na.rm = T), # self-effeicacy
+    SS = rowMeans(dplyr::select(., starts_with("SS")), na.rm = T), # supervisor support
+    TS = rowMeans(dplyr::select(., starts_with("TS")), na.rm = T), # task signifiance
+    JS = rowMeans(dplyr::select(., starts_with("JS")), na.rm = T), # job satisfaction
+    FP = rowMeans(dplyr::select(., FP1:FP2), na.rm = T), # fair procedures
+    OA = rowMeans(dplyr::select(., OA1:OA2), na.rm = T), # organizational authenticity
+    JE = rowMeans(dplyr::select(., JE1:JE2), na.rm = T), # job embeddedness
+    CR = rowMeans(dplyr::select(., CR1:CR3), na.rm = T)  # coworker relationships
+) %>% dplyr::select(ID, Auto, SE:CR, everything())
+# combine cleaned data with demographics data
+cleandata_cb <- cleandata %>% left_join(rawdemo, by = c("ID" = "ID"))
+head(cleandata_cb)
+```
+
+```{r}
+#reorganize data (code demographics as factors)  
+cleandata_cb_2 <- cleandata_cb %>% select(ID:CR) %>% bind_cols(cleandata_cb %>%  
+  select(gender:department) %>% mutate_if(is.numeric, ~as.factor(.))) 
+cleandata_cb_2_demo <- cleandata_cb_2 %>% select(ID,JS,c(gender:department))  
+```
+
+# Exploratory Analysis
+
+## Descriptives and Correlation Matrix among Variables
+This step is to examine correlations among key variables: all predictors are moderately to highly correlated with each other, and all predictors are moderately to highly correlated with Job Satisfaciton. OLS regressions would not be a good choice in this situation. Relative weight analysis would be a good option in this case to examine the variance contributed by predictors to the outcome (job satisfaction).   
+```{r}
+se <- function(x,na.rm = TRUE) sqrt(var(x,na.rm = TRUE)/length(x))
+cleandata_cb %>% select(ID:CR) %>%
+  gather( "variable", "value", -ID, na.rm = FALSE) %>% 
+  group_by(variable) %>%
+  summarise(Mean = round(mean(value,na.rm = TRUE),2), 
+            SD = round(sd(value, na.rm = TRUE),2), 
+            StdEr = round(se(value, na.rm = TRUE),2)) -> var_descriptive
+## import function I wrote before to get correlation matrix
+# This function requires the following package
+# library(Hmisc)
+source("Correlation_matrix_function.R")
+correlations <- cormatrix(dplyr::select(cleandata_cb, Auto:CR)) 
+correlations$variable <-  names(correlations)
+correlations <- correlations %>% left_join(var_descriptive, by = c("variable")) %>% 
+  select(variable, Mean, SD, everything())
+# rownames(correlations) = names(correlations)
+correlations2 <- correlations %>% select(-StdEr)
+print(correlations2)
+# write.csv(correlations2,"correlations2.csv")
+```
+
+As shown in the graphic below, mean scores of the variables are all high. Task Significance, Organizational Authenticity, and Job Embeddedness are relatively lower than others. Job satisfaction is also high.  
+```{r, out.height = '60%', out.width = '60%',  fig.align = "center"}
+ggplot(correlations, aes(x=variable, y=Mean)) + 
+  geom_bar(stat="identity", color="black", 
+           position=position_dodge()) +
+  geom_errorbar(aes(ymin=Mean-StdEr, ymax=Mean+StdEr), width=.2,
+                 position=position_dodge(.9)) +
+  labs(title = "Mean and Standard Error of the Variables", y = "Mean Score") + 
+  geom_text(aes(label=Mean), vjust=2, color="white", size=4)
+```
+
+Graphs below show the score distributions of all variables. Scores are slightly skewed; no variables are highly skewed. For the time being, no transformations will be conducted. If time permits, transformations of the distributions may be conducted and sensitivity analysis needs to be conducted to see if the transformations have a large effect on the results.  
+```{r, out.height = '60%', out.width = '60%', fig.align = "center", warning = FALSE}
+cleandata_cb %>% dplyr::select(Auto:CR) %>% gather() %>% ggplot(aes(value)) +
+  facet_wrap(~ key, scales = "free") +
+  geom_histogram(binwidth = 0.25)
+```
+  
+## Demographic Differences in Job Satisfaction
+This step is to examine if there are any demographic differences in job satisfaction using ANOVA. There are significant differences in hourly_salaried, income, manager, but not others. Results of relative weight analysis will be compared for hourly_salaried(*F*(1,460) = 6.906, *p* < .05), income(*F*(5,456) = 3.446, *p* < .01), manager(*F*(1,460) = 11.74, *p* < .001). ANOVA output is shown at the end of the document (supplemental material section)
+```{r,eval = FALSE}
+anova.hourly_salaried2 <- aov(JS ~ factor(hourly_salaried), data = cleandata_cb_2_demo)
+summary(anova.hourly_salaried2)
+Tukey.means.hourly_salaried <- TukeyHSD(x=anova.hourly_salaried2, 'factor(hourly_salaried)', conf.level=0.95)
+Tukey.means.hourly_salaried
+anova.income2 <- aov(JS ~ factor(income), data = cleandata_cb_2_demo)
+summary(anova.income2)
+Tukey.means.income <- TukeyHSD(x=anova.income2, 'factor(income)', conf.level=0.95)
+Tukey.means.income
+anova.manager2 <- aov(JS ~ factor(manager), data = cleandata_cb_2_demo)
+summary(anova.manager2)
+Tukey.means.manager <- TukeyHSD(x=anova.manager2, 'factor(manager)', conf.level=0.95)
+Tukey.means.manager
+anova.gender<- lm(JS ~ factor(gender), data = cleandata_cb_2_demo); anova(anova.gender)
+anova.tenure <- lm(JS ~ factor(tenure), data = cleandata_cb_2_demo); anova(anova.tenure)
+anova.highest_ed <- lm(JS ~ factor(highest_ed), data = cleandata_cb_2_demo); anova(anova.highest_ed)
+anova.region <- lm(JS ~ factor(region), data = cleandata_cb_2_demo); anova(anova.region)
+anova.department <- lm(JS ~ factor(department), data = cleandata_cb_2_demo); anova(anova.department)
+```
+  
+Graphs below show job satisfaction scores for different levels of hourly_salaried, income, manager, since ANOVA revealed that there are differences in job satisfaction for these demographic variables.  
+```{r, out.height = '60%', out.width = '60%', fig.align = "center"}
+cleandata_cb_2_demo %>% select(ID, JS, manager, hourly_salaried, income) %>%
+  mutate( hourly_salaried = case_when( is.na(hourly_salaried) ~ "NA", 
+              hourly_salaried == 1 ~ "Hourly", hourly_salaried == 2 ~ "Salaried"),
+          income = case_when(is.na(income) ~ "NA", income == 1 ~ "Less than $20,000", 
+              income == 2 ~ "$20,000 to $34,999", income == 3 ~ "$35,000 to $49,999", 
+              income == 4 ~ "$50,000 to $74,999", income == 5 ~ "$75,000 to $99,999", 
+              income == 6 ~ "Over $100,000")) %>% 
+  gather( "demo", "value", -ID, -JS, na.rm = FALSE) %>%
+  dplyr::select(-ID) %>% group_by(demo, value) %>%
+  summarise(demo_mean = round(mean(JS,na.rm = TRUE),2),demo_StdEr =round(se(JS,na.rm = TRUE),2)) %>%
+  ggplot(aes(x = reorder(factor(value), demo_mean), y = demo_mean)) +
+  geom_bar(stat="identity") +
+  geom_errorbar(aes(ymin=demo_mean-demo_StdEr, ymax=demo_mean+demo_StdEr), width=.2,
+                position=position_dodge(.9)) + 
+  labs(title = "Mean Job Satisfaction for Different Demographics", x = "", y = "Mean Score") + 
+  facet_wrap(~ demo, scales = "free") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+  
+## Explore Missing Data
+This is to examine missing data for raw scores and scale scores: since there are only two missing data points. those observations will be excluded to simplify  analysis (e.g., relative weight analysis, etc.); if time permits, sensitivity analysis needs to be conducted to examine if excluding those cases would create differences in the results. Multiple imputation could be used to impute the missing data.
+```{r}
+# rawdata %>% dplyr::filter_all(any_vars(is.na(.)))
+cleandata_cb %>% dplyr::select(ID:CR) %>% dplyr::filter_all(any_vars(is.na(.)))
+```
+  
+# Relative Weight Analysis
+To take into account that all variables are moderately to highly correlated with each other and with the outcome job satisfaction, relative weights analysis is conducted to examine the relative contributions of each predictor to the outcome Job Satisfaction.
+```{r}
+## import function I used before to conduct relative weights analysis with bootstrapped resamples
+source("Relative_weights_analysis_function.R")
+# remove missing data so the script can computer the CIs for relative weights 
+# with bootstrapped resamples
+thedata <- cleandata_cb %>% dplyr::select(Auto:CR) %>% 
+  dplyr::filter_all(all_vars(!is.na(.))) %>% dplyr::select(JS, everything()) %>% as.data.frame()
+# rwa analysis
+rwa_results <- rwa(thedata,iter = 5000)
+RSQ.Results<-rwa_results[[1]]
+RW.Results<-rwa_results[[2]]
+CI.Results<-rwa_results[[3]]
+CI.Significance<-rwa_results[[4]]
+rwa.output <- RW.Results %>% left_join(CI.Results, by = c("Variables")) %>%
+  left_join(CI.Significance, by = c("Variables" = "Labels")) %>%
+  mutate_if(vars(is.numeric(.)), ~round(.,digits = 3)) %>%  
+  mutate(#CI.Raw = paste0("[",CI.Lower.Bound.x,", ",CI.Upper.Bound.x,"]"),
+         CI.Sig = paste0("[",CI.Lower.Bound.y,", ",CI.Upper.Bound.y,"]")) %>%
+  select(Variables:Rescaled.RelWeight, CI.Sig) %>%
+  mutate(Variables = case_when(
+    Variables %in% c("Auto") ~ "Autonomy", Variables %in% c("SE") ~ "Self-efficacy",
+    Variables %in% c("SS") ~ "Supervisor support",Variables %in% c("TS") ~ "Task signifiance",
+    Variables %in% c("FP") ~ "Fair procedures",Variables %in% c("OA") ~ "Organizational authenticy",
+    Variables %in% c("JE") ~ "Job embeddedness",Variables %in% c("CR") ~ "Coworker relationships"
+  ) ) %>% arrange(desc(Rescaled.RelWeight))
+rwa.output2 <- rwa.output  %>% 
+  rename('Raw Weight'= Raw.RelWeight,'Scaled Weight (%)' = Rescaled.RelWeight,'CI Ho testing' = CI.Sig ) 
+print(rwa.output2) #; write.csv(rwa.output2, "rwa.output2.csv")
+```
+Below is a graphic display of relative contributions of the predictors to Job Satisfaction (how much variances in the outcome explained by the predictors). As shown in the figure, **Organizational Authenticy** and **Coworker Relationships** contributed to Job Satisfaction the most (explained 16.46% and 16.26% variance respectively). **Task Significance** and **Supervisor Support** also explained a good amount of variance, 14.30% and 12.78% respectively. These areas are the ones to focus on to improve to improve Job Satisfaction. Considering Organizational Authenticity and Task Significance have relatively lower mean scores, these two areas should especially be focused on for improvement.
+```{r, out.height = '60%', out.width = '60%', fig.align = "center"}
+rwa.output %>% ggplot(aes(x = reorder(Variables, Rescaled.RelWeight), y = Rescaled.RelWeight)) + 
+  geom_bar(stat = "identity") +
+  labs(title = "Contributions of Different Variables to Job Satisfaction",
+       y = "Scaled Relative Weight (%)") + 
+  coord_flip() + 
+  geom_text(aes(label=Rescaled.RelWeight), hjust=1.2, color="white", size=3.5) +
+  theme_minimal() 
+```
+
+## Relative Weight Analysis for Different Demographic Groups
+This step is to compare if there are demographic differences in the results of relative weight analysis. To simplifiy analysis, levels of income are divided to low vs. high income groups $50,000 is the cutoff); each group roughly have the same number of people: 265 for low income group and 197 for high income group.  
+
+As shown below, because bootstrapped confidence intervals cover zero, there's no significant difference for low vs. high income groups, whether they are managers or not, or whether they are hourly or not. Thus, factors influencing job satisfaction are the same across these three different demographic groups. Strategies proposed to improve the identified factors that have the most impact on job satisfaction are applicable across different groups within the organization.
+
+```{r}  
+source("Relative_weights_analysis_group_comparison_function.R")
+cleandata_cb_3 <- cleandata_cb %>% 
+  select(ID:CR, gender:department) %>%
+  mutate(income2 = as.numeric(case_when(
+    is.na(income) ~ "NA", income <= 3 ~ "1", income >3 ~ "2")),
+  manager2 = as.numeric(case_when(
+    is.na(manager) ~ "NA", manager == "Yes" ~ "1", manager == "No" ~ "2")))
+thedata <- cleandata_cb_3 %>% select(JS, Auto, SE, SS, TS, FP, OA, JE, CR) %>% as.data.frame()
+### income
+grpdata<-cleandata_cb_3 %>%
+  select(JS, Auto, SE, SS, TS, FP, OA, JE, CR, income2) %>%
+  rename(grouping = income2) %>% as.data.frame()
+rwa_compare_results_income<-rwa_compare(thedata, grpdata,iter = 5000)
+### manager
+grpdata<-cleandata_cb_3 %>% 
+  select(JS, Auto, SE, SS, TS, FP, OA, JE, CR, manager2) %>% 
+  rename(grouping = manager2) %>% as.data.frame()
+rwa_compare_results_manager<-rwa_compare(thedata, grpdata,iter = 5000)
+### hourly salary
+grpdata<-cleandata_cb_3 %>%
+  select(JS, Auto, SE, SS, TS, FP, OA, JE, CR, hourly_salaried) %>%
+  rename(grouping = hourly_salaried) %>% as.data.frame()
+rwa_compare_results_hourly<-rwa_compare(thedata, grpdata,iter = 5000)
+# comparing predictors across 2 groups
+# If Zero is not included, Weights are Significantly different between the groups
+rwa_compare_results_income[[3]] %>%
+  mutate_if(vars(is.numeric(.)), ~round(.,digits = 3)) %>%  
+  mutate('Income:High vs. Low' = paste0("[",CI.Lower.Bound,", ",CI.Upper.Bound,"]")) %>% 
+    select(-contains("CI")) %>%
+  left_join(rwa_compare_results_manager[[3]] %>%
+  mutate_if(vars(is.numeric(.)), ~round(.,digits = 3)) %>%  
+  mutate('Manager:Yes vs. No' = paste0("[",CI.Lower.Bound,", ",CI.Upper.Bound,"]")) %>% 
+    select(-contains("CI")), by = c("Labels")
+  ) %>% left_join(rwa_compare_results_hourly[[3]] %>%
+  mutate_if(vars(is.numeric(.)), ~round(.,digits = 3)) %>%  
+  mutate('Hourly vs. Salary' = paste0("[",CI.Lower.Bound,", ",CI.Upper.Bound,"]")) %>% 
+    select(-contains("CI")),by = c("Labels")) %>% 
+  rename(Variable = Labels) -> rwa_compare_results_all
+print(rwa_compare_results_all)
+```
+
+#### Supplemental Analysis
+ANOVA to examine if there are demographic differences in job satisfaction
+```{r, echo=FALSE}
+anova.hourly_salaried2 <- aov(JS ~ factor(hourly_salaried), data = cleandata_cb_2_demo)
+summary(anova.hourly_salaried2)
+Tukey.means.hourly_salaried <- TukeyHSD(x=anova.hourly_salaried2, 'factor(hourly_salaried)', conf.level=0.95)
+Tukey.means.hourly_salaried
+anova.income2 <- aov(JS ~ factor(income), data = cleandata_cb_2_demo)
+summary(anova.income2)
+Tukey.means.income <- TukeyHSD(x=anova.income2, 'factor(income)', conf.level=0.95)
+Tukey.means.income
+anova.manager2 <- aov(JS ~ factor(manager), data = cleandata_cb_2_demo)
+summary(anova.manager2)
+Tukey.means.manager <- TukeyHSD(x=anova.manager2, 'factor(manager)', conf.level=0.95)
+Tukey.means.manager
+anova.gender<- lm(JS ~ factor(gender), data = cleandata_cb_2_demo); anova(anova.gender)
+anova.tenure <- lm(JS ~ factor(tenure), data = cleandata_cb_2_demo); anova(anova.tenure)
+anova.highest_ed <- lm(JS ~ factor(highest_ed), data = cleandata_cb_2_demo); anova(anova.highest_ed)
+anova.region <- lm(JS ~ factor(region), data = cleandata_cb_2_demo); anova(anova.region)
+anova.department <- lm(JS ~ factor(department), data = cleandata_cb_2_demo); anova(anova.department)
+```
+  
