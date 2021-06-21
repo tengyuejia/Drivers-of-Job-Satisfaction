@@ -87,7 +87,8 @@ ggplot(correlations, aes(x=variable, y=Mean)) +
   geom_text(aes(label=Mean), vjust=2, color="white", size=4)
 ```
 
-Graphs below show the score distributions of all variables. Scores are slightly skewed; no variables are highly skewed. For the time being, no transformations will be conducted. If time permits, transformations of the distributions may be conducted and sensitivity analysis needs to be conducted to see if the transformations have a large effect on the results.  
+Graphs below show the score distributions of all variables. Scores are slightly skewed; no variables are highly skewed. For the time being, no transformations will be conducted.
+
 ```{r, out.height = '60%', out.width = '60%', fig.align = "center", warning = FALSE}
 cleandata_cb %>% dplyr::select(Auto:CR) %>% gather() %>% ggplot(aes(value)) +
   facet_wrap(~ key, scales = "free") +
