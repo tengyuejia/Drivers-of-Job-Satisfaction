@@ -28,14 +28,14 @@ rawdemo <- readxl::read_excel(paste(here::here(), "Data.xlsx", sep = "/"),
                              na = c("99"))
 #create mean scores for the items in data sheet and demographics  
 cleandata <- rawdata %>% mutate(
-    SE = rowMeans(dplyr::select(., starts_with("SE")), na.rm = T), # self-effeicacy
-    SS = rowMeans(dplyr::select(., starts_with("SS")), na.rm = T), # supervisor support
-    TS = rowMeans(dplyr::select(., starts_with("TS")), na.rm = T), # task signifiance
-    JS = rowMeans(dplyr::select(., starts_with("JS")), na.rm = T), # job satisfaction
-    FP = rowMeans(dplyr::select(., FP1:FP2), na.rm = T), # fair procedures
-    OA = rowMeans(dplyr::select(., OA1:OA2), na.rm = T), # organizational authenticity
-    JE = rowMeans(dplyr::select(., JE1:JE2), na.rm = T), # job embeddedness
-    CR = rowMeans(dplyr::select(., CR1:CR3), na.rm = T)  # coworker relationships
+    SE = rowMeans(dplyr::select(., starts_with("SE")), na.rm = T), 
+    SS = rowMeans(dplyr::select(., starts_with("SS")), na.rm = T), 
+    TS = rowMeans(dplyr::select(., starts_with("TS")), na.rm = T), 
+    JS = rowMeans(dplyr::select(., starts_with("JS")), na.rm = T), 
+    FP = rowMeans(dplyr::select(., FP1:FP2), na.rm = T), 
+    OA = rowMeans(dplyr::select(., OA1:OA2), na.rm = T), 
+    JE = rowMeans(dplyr::select(., JE1:JE2), na.rm = T), 
+    CR = rowMeans(dplyr::select(., CR1:CR3), na.rm = T)  
 ) %>% dplyr::select(ID, Auto, SE:CR, everything())
 # combine cleaned data with demographics data
 cleandata_cb <- cleandata %>% left_join(rawdemo, by = c("ID" = "ID"))
@@ -75,7 +75,8 @@ print(correlations2)
 # write.csv(correlations2,"correlations2.csv")
 ```
 
-As shown in the graphic below, mean scores of the variables are all high. Task Significance, Organizational Authenticity, and Job Embeddedness are relatively lower than others. Job satisfaction is also high.  
+As shown in the graphic below, mean scores of the variables are all high. 
+
 ```{r, out.height = '60%', out.width = '60%',  fig.align = "center"}
 ggplot(correlations, aes(x=variable, y=Mean)) + 
   geom_bar(stat="identity", color="black", 
@@ -94,7 +95,8 @@ cleandata_cb %>% dplyr::select(Auto:CR) %>% gather() %>% ggplot(aes(value)) +
 ```
   
 ## Demographic Differences in Job Satisfaction
-This step is to examine if there are any demographic differences in job satisfaction using ANOVA. There are significant differences in hourly_salaried, income, manager, but not others. Results of relative weight analysis will be compared for hourly_salaried(*F*(1,460) = 6.906, *p* < .05), income(*F*(5,456) = 3.446, *p* < .01), manager(*F*(1,460) = 11.74, *p* < .001). ANOVA output is shown at the end of the document (supplemental material section)
+This step is to examine if there are any demographic differences in job satisfaction using ANOVA. 
+
 ```{r,eval = FALSE}
 anova.hourly_salaried2 <- aov(JS ~ factor(hourly_salaried), data = cleandata_cb_2_demo)
 summary(anova.hourly_salaried2)
@@ -115,7 +117,7 @@ anova.region <- lm(JS ~ factor(region), data = cleandata_cb_2_demo); anova(anova
 anova.department <- lm(JS ~ factor(department), data = cleandata_cb_2_demo); anova(anova.department)
 ```
   
-Graphs below show job satisfaction scores for different levels of hourly_salaried, income, manager, since ANOVA revealed that there are differences in job satisfaction for these demographic variables.  
+Graphs below show job satisfaction scores for different levels of predictors, since ANOVA revealed that there are differences in job satisfaction for these demographic variables.  
 ```{r, out.height = '60%', out.width = '60%', fig.align = "center"}
 cleandata_cb_2_demo %>% select(ID, JS, manager, hourly_salaried, income) %>%
   mutate( hourly_salaried = case_when( is.na(hourly_salaried) ~ "NA", 
@@ -137,14 +139,14 @@ cleandata_cb_2_demo %>% select(ID, JS, manager, hourly_salaried, income) %>%
 ```
   
 ## Explore Missing Data
-This is to examine missing data for raw scores and scale scores: since there are only two missing data points. those observations will be excluded to simplify  analysis (e.g., relative weight analysis, etc.); if time permits, sensitivity analysis needs to be conducted to examine if excluding those cases would create differences in the results. Multiple imputation could be used to impute the missing data.
+This is to examine missing data for raw scores and scale scores: since there are only two missing data points. those observations will be excluded to simplify  analysis (e.g., relative weight analysis, etc.)
 ```{r}
 # rawdata %>% dplyr::filter_all(any_vars(is.na(.)))
 cleandata_cb %>% dplyr::select(ID:CR) %>% dplyr::filter_all(any_vars(is.na(.)))
 ```
   
 # Relative Weight Analysis
-To take into account that all variables are moderately to highly correlated with each other and with the outcome job satisfaction, relative weights analysis is conducted to examine the relative contributions of each predictor to the outcome Job Satisfaction.
+To take into account that all variables are moderately to highly correlated with each other and with the outcome, relative weights analysis is conducted to examine the relative contributions of each predictor to the outcome.
 ```{r}
 ## import function I used before to conduct relative weights analysis with bootstrapped resamples
 source("Relative_weights_analysis_function.R")
@@ -174,7 +176,8 @@ rwa.output2 <- rwa.output  %>%
   rename('Raw Weight'= Raw.RelWeight,'Scaled Weight (%)' = Rescaled.RelWeight,'CI Ho testing' = CI.Sig ) 
 print(rwa.output2) #; write.csv(rwa.output2, "rwa.output2.csv")
 ```
-Below is a graphic display of relative contributions of the predictors to Job Satisfaction (how much variances in the outcome explained by the predictors). As shown in the figure, **Organizational Authenticy** and **Coworker Relationships** contributed to Job Satisfaction the most (explained 16.46% and 16.26% variance respectively). **Task Significance** and **Supervisor Support** also explained a good amount of variance, 14.30% and 12.78% respectively. These areas are the ones to focus on to improve to improve Job Satisfaction. Considering Organizational Authenticity and Task Significance have relatively lower mean scores, these two areas should especially be focused on for improvement.
+Below is a graphic display of relative contributions of the predictors to Job Satisfaction (how much variances in the outcome explained by the predictors). 
+
 ```{r, out.height = '60%', out.width = '60%', fig.align = "center"}
 rwa.output %>% ggplot(aes(x = reorder(Variables, Rescaled.RelWeight), y = Rescaled.RelWeight)) + 
   geom_bar(stat = "identity") +
@@ -186,9 +189,8 @@ rwa.output %>% ggplot(aes(x = reorder(Variables, Rescaled.RelWeight), y = Rescal
 ```
 
 ## Relative Weight Analysis for Different Demographic Groups
-This step is to compare if there are demographic differences in the results of relative weight analysis. To simplifiy analysis, levels of income are divided to low vs. high income groups $50,000 is the cutoff); each group roughly have the same number of people: 265 for low income group and 197 for high income group.  
+This step is to compare if there are demographic differences in the results of relative weight analysis
 
-As shown below, because bootstrapped confidence intervals cover zero, there's no significant difference for low vs. high income groups, whether they are managers or not, or whether they are hourly or not. Thus, factors influencing job satisfaction are the same across these three different demographic groups. Strategies proposed to improve the identified factors that have the most impact on job satisfaction are applicable across different groups within the organization.
 
 ```{r}  
 source("Relative_weights_analysis_group_comparison_function.R")
