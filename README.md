@@ -1,2 +1,2 @@
 # Drivers of Employees' Job Satisfaction
-This project uses key driver analysis (relative weights analysis) and visualizations to investigate what drives employee job satisfaction. One .xlsx data file was used (not included in this directory). Two tabs are in this .xlsx file: 1)employee survey data keyed by employee ID, and 2) employee demographic info keyed by employee ID, Raw data contain NAs and scale scores have not been created.
+This project uses key driver analysis (relative weights analysis) and visualizations to investigate what drives employee job satisfaction. Data include: 1) employee survey data  and 2) employee demographic info
